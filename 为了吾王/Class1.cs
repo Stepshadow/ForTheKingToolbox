@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
+using HarmonyLib;
 using UnityEngine;
 
 namespace ForTheKingToolbox
@@ -9,7 +10,7 @@ namespace ForTheKingToolbox
     [BepInPlugin(
         "com.wuyipeng.fortheking.toolbox",
         "For The King Toolbox",
-        "0.4.0"
+        "0.4.1"
     )]
     public class ForTheKingToolboxPlugin : BaseUnityPlugin
     {
@@ -28,6 +29,12 @@ namespace ForTheKingToolbox
 
         private void Awake()
         {
+            Harmony harmony = new Harmony(
+                "com.wuyipeng.fortheking.toolbox"
+            );
+
+            harmony.PatchAll();
+
             Logger.LogInfo("For The King Toolbox loaded.");
         }
 
@@ -69,8 +76,8 @@ namespace ForTheKingToolbox
         private void DrawToolboxWindow(int windowId)
         {
             GUI.Label(
-                new Rect(15, 32, 500, 22),
-                "单击物品即可发给当前操作的角色。"
+                new Rect(15, 32, 650, 22),
+                "单击物品即可标记；下一次战斗奖励将包含该物品。"
             );
 
             GUI.Label(new Rect(15, 58, 45, 22), "搜索：");
@@ -117,7 +124,7 @@ namespace ForTheKingToolbox
                     item.DisplayName
                 ))
                 {
-                    GiveItem(item);
+                    MarkItem(item);
                 }
 
                 GUI.Label(
@@ -135,7 +142,26 @@ namespace ForTheKingToolbox
                 "显示 " + visibleItems.Count + " / " + allItems.Count + " 个物品"
             );
 
-            GUI.Label(new Rect(570, 595, 210, 22), "快捷键：G");
+            if (PendingBattleReward.HasPendingItem)
+            {
+                GUI.Label(
+                    new Rect(365, 595, 280, 22),
+                    "已标记：" + PendingBattleReward.ItemName
+                );
+            }
+            else
+            {
+                GUI.Label(
+                    new Rect(365, 595, 280, 22),
+                    "当前未标记物品"
+                );
+            }
+
+            if (GUI.Button(new Rect(660, 592, 120, 25), "取消标记"))
+            {
+                PendingBattleReward.Clear();
+                statusText = "已取消战斗奖励标记。";
+            }
 
             GUI.DragWindow(new Rect(0, 0, 800, 28));
         }
@@ -183,7 +209,18 @@ namespace ForTheKingToolbox
                 index++;
             }
 
-            statusText = "已读取 " + allItems.Count + " 个物品。";
+            if (PendingBattleReward.HasPendingItem)
+            {
+                statusText =
+                    "已读取 " + allItems.Count
+                    + " 个物品。当前标记："
+                    + PendingBattleReward.ItemName;
+            }
+            else
+            {
+                statusText = "已读取 " + allItems.Count + " 个物品。";
+            }
+
             Logger.LogInfo("Loaded " + allItems.Count + " items.");
         }
 
@@ -391,47 +428,22 @@ namespace ForTheKingToolbox
             return result;
         }
 
-        private void GiveItem(ItemEntry item)
+        private void MarkItem(ItemEntry item)
         {
-            try
-            {
-                if (GameLogic.Instance == null)
-                {
-                    statusText = "请先进入一局冒险。";
-                    return;
-                }
+            PendingBattleReward.Mark(
+                item.InternalName,
+                item.DisplayName
+            );
 
-                CharacterOverworld currentCharacter =
-                    GameLogic.Instance.GetCurrentCOW();
+            statusText =
+                "已标记：" + item.DisplayName
+                + "。下一次战斗奖励将尝试出现它。";
 
-                if (currentCharacter == null)
-                {
-                    statusText = "没有找到当前角色。";
-                    return;
-                }
-
-                GridEditor.FTK_itembase.ID itemId =
-                    GridEditor.FTK_itembase.GetEnum(
-                        item.InternalName
-                    );
-
-                currentCharacter.AddItemToBackpack(
-                    itemId,
-                    currentCharacter
-                );
-
-                statusText = "已获得：" + item.DisplayName;
-
-                Logger.LogInfo(
-                    "Gave item: " + item.DisplayName
-                    + " (" + item.InternalName + ")"
-                );
-            }
-            catch (Exception error)
-            {
-                statusText = "发放失败：" + error.Message;
-                Logger.LogError(error);
-            }
+            Logger.LogInfo(
+                "Marked battle reward item: "
+                + item.DisplayName
+                + " (" + item.InternalName + ")"
+            );
         }
 
         private class ItemEntry
